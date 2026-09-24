@@ -512,3 +512,183 @@ strategy / story / rule / constraint / composite-workflow / gap / glossary / arc
 
 ### Key lesson from sample project failure
 The sample (graphology.club planning system) failed because the AI was asked to autonomously classify, triage, split, rename, and restructure files. AI fatigue, hallucination, and rule non-compliance resulted. The fix: the tool enforces structure mechanically. The human decides everything. The AI assists only when explicitly invited.
+
+
+---
+
+## Decimal Classification System Discussion
+
+**Date:** 2026-09-23
+**Topic:** AI-readable decimal addressing for PRD items
+
+---
+
+**USER:**
+In the input and possible display, we need a decimal system where the Domain say domain 1 to domain 7 are the top decimal numbers starting from 0 as undefined domain to 7, aka 0 1 2 3 4 5 6 7. I am unsure how to or what to allocate the sub decimal numbers so what is after domain 1 point aka 1.1 what is the .1 and then 1.1.1 aka .1.1 classifier. Is it (question) the types like Strategy, Story, Rule, Constraint, Concept, Gap, Concept, etc.
+
+What is your take?
+
+---
+
+**AI:**
+Good instinct. A decimal classification system gives every item a unique, human-readable address that also communicates its position in the hierarchy at a glance.
+
+Three options were considered:
+
+**Option A — Domain . Type . Sequence**
+`1.3.7` = domain-1, Rule type, item 7. Type gets a fixed number. The classification is readable from the ID alone.
+
+**Option B — Domain . Stage . Sequence**
+`1.2.5` = domain-1, Discussion stage, item 5. Clean but loses the type signal.
+
+**Option C — Domain . Type . Stage with suffix counter**
+`1.3.2-007` = domain-1, Rule, Discussion stage, item 7. Hybrid — decimal is a classifier, suffix is a counter.
+
+Recommendation: Option A — most information-dense and self-contained.
+
+Proposed type numbering:
+```
+0 = undefined
+1 = Strategy
+2 = Story
+3 = Rule
+4 = Constraint
+5 = Composite Workflow
+6 = Gap
+7 = Glossary
+8 = Architecture
+9 = Concept
+```
+
+Question raised: should 0.0.0 be a valid reserved address for undefined items?
+
+---
+
+**USER:**
+0 is undefined above top domain so it may not have numbering order, because if we can get it a numbering order then it is defined and will not remain undefined. So we can use 0 under say Domain 1 aka 1.0 as a undefined component of Domain 1. Or Domain 1 Sub section 1 so 1.1 and then a zero is 1.1.0 a undefined component of that Sub section. Is this understood?
+
+---
+
+**AI:**
+Yes, understood completely. The principle:
+
+> `0` at any level means "undefined at that level" — it is a placeholder, not a classifier. Once something gets a real number it becomes defined and loses the `0`.
+
+```
+0          → undefined domain (top level, no classification at all)
+1          → domain-1 (defined)
+1.0        → something in domain-1 but subsection not yet decided
+1.1        → domain-1, subsection 1 (defined)
+1.1.0      → something in domain-1, subsection 1, but leaf not yet classified
+1.1.3      → domain-1, subsection 1, leaf item 3 (fully defined)
+```
+
+`0` cascades as a "not yet placed" marker at whatever level it appears.
+
+The elegant consequence: an Idea captured in ultra-low-friction mode gets `1.0.0` — it belongs to domain-1 but nothing else is decided. As classification happens, the zeros get replaced with real numbers. The address fills in progressively. A fully classified item has no zeros.
+
+---
+
+**USER:**
+yes, thank you. So we have say 0-7 allocated to the top domains 1 through 7. What are the sub and sub sub sections of the decimal system? The focus on this exercise is to get a ai readable prd product requirements document. Study and share your thoughts.
+
+---
+
+**AI:**
+The goal of AI-readable PRD changes how we think about the decimal system.
+
+**What makes a PRD AI-readable?**
+An AI agent reading a PRD needs to answer these questions instantly, without parsing prose:
+1. What domain does this belong to?
+2. What kind of requirement is this?
+3. What stage is it at?
+4. How certain is this?
+5. What does it depend on?
+6. What release does it target?
+7. What priority is it?
+
+A decimal address that encodes questions 1 and 2 — combined with structured frontmatter for 3–7 — gives an AI everything it needs from the first two lines of a file.
+
+**Four-level structure explored:**
+
+```
+[domain].[type].[stage].[sequence]
+```
+
+| Level | Position | Range | Meaning |
+|---|---|---|---|
+| Domain | `x` | 0–7 | Which of the 7 domains. 0 = unassigned |
+| Type | `x.x` | 0–9 | What kind of item. 0 = untyped |
+| Stage | `x.x.x` | 0–3 | Lifecycle stage. 0 = unstaged |
+| Sequence | `x.x.x.x` | 0–n | Item number within that coordinate. 0 = draft/unsequenced |
+
+Stage numbering:
+```
+0 = undefined / unstaged
+1 = Idea
+2 = Discussion
+3 = PRD
+```
+
+Examples:
+```
+0.0.0.0    → completely undefined, raw capture
+1.0.0.0    → domain-1, nothing else decided yet
+1.3.0.0    → domain-1, Rule type, stage not decided
+1.3.1.0    → domain-1, Rule, Idea stage, draft
+1.3.1.7    → domain-1, Rule, Idea stage, 7th item
+1.3.3.7    → domain-1, Rule, PRD stage, 7th item
+2.9.2.4    → domain-2, Concept, Discussion stage, 4th item
+```
+
+**Why this is good for AI:**
+An AI agent can filter by coordinate without parsing any prose:
+- `*.3.3.*` → all PRD-stage Rules across all domains
+- `1.*.*.*` → everything in domain-1
+- `*.*.1.*` → all Ideas (seeds) for triage
+- `*.0.*.*` → everything not yet typed — a triage queue
+- `*.*.*.0` → all drafts not yet formally sequenced
+
+**Consideration on length:**
+Four levels makes `1.3.3.12` — readable but long. Dropping stage from the decimal (it's already in frontmatter) keeps it compact:
+
+```
+[domain].[type].[sequence]
+
+1.3.7   → domain-1, Rule, item 7
+```
+
+**Final recommendation: Three levels — domain . type . sequence**
+
+```
+1.3.7
+```
+
+- Short enough to be human-readable at a glance
+- Encodes domain + type directly in the number
+- Stage, priority, release target, status live in frontmatter where AI reads structured data anyway
+- `0` at any level preserves the undefined/placeholder rule
+- Stage does not need to be in the number — it is already a first-class frontmatter field. Adding it creates length without adding information an AI cannot already find in one key-value lookup
+
+---
+
+**USER:**
+as of now this looks good. Can you append this concept discussion to the file core-concept-plan-server *.md under the plan-concept folder for reference.
+
+---
+
+**AI:**
+Appended this full decimal classification discussion to CORE-Concept-plan-server-design-discussion.md.
+
+---
+
+## Design Conclusions — Decimal Classification System
+
+- Top level: domains 1–7, with 0 = undefined at any level
+- `0` is a progressive placeholder — it fills in as classification happens, never stays permanent
+- Three-level address: `[domain].[type].[sequence]`
+- Type is encoded in the second level using fixed numbers (0–9)
+- Sequence starts at 0 (draft/unsequenced), increments as items are formally placed
+- A fully classified item has no zeros in its address
+- Stage is NOT part of the decimal — it lives in frontmatter as a first-class field
+- The decimal address is a query coordinate for AI filtering, not just a label
