@@ -1,5 +1,5 @@
 # System Prompt: Local Planning Server
-**Version:** 0.3.0
+**Version:** 0.4.0
 **Date:** 2026-09-23
 **Status:** Draft — MVP scope ready for implementation
 
@@ -29,8 +29,18 @@ Build a local server that provides a web form for capturing structured planning 
 - **Front end:** Plain HTML + CSS (no framework)
 - **Storage:** Local filesystem (markdown files)
 - **Version control:** Git (auto-initialized per project)
-- **Port:** 3000 (localhost only, no external access)
+- **Port:** 3000
+- **Bind address:** `127.0.0.1` (loopback only) — the server MUST NOT bind to `0.0.0.0` or any external interface. Requests from any address other than localhost are rejected.
 - **Dependencies:** Minimal. No database. No ORM. Files are the database.
+
+### Security boundary `[MVP]`
+
+- Bind exclusively to `127.0.0.1:3000` — never `0.0.0.0`
+- Validate all path components as slugs before any filesystem operation — no path traversal
+- All user-supplied text written to YAML frontmatter MUST be serialized through a safe YAML library — never string-interpolated
+- Enforce a request body size limit (suggested: 512KB) to prevent oversized submissions
+- Markdown rendered in list views MUST be sanitized before output — no raw HTML passthrough
+- No credentials, tokens, or remote URLs are written into generated project files or server logs
 
 ---
 
@@ -42,6 +52,7 @@ Build a local server that provides a web form for capturing structured planning 
 - Server runs locally, no auth
 
 ### `[MMP]` — Full planning tool
+> **Note:** MMP (Minimum Marketable Product) and MMR (Minimum Marketable Release) are the same stage — different names for the same concept in different literature. This spec uses MMP throughout.
 - All three item stages: Idea, Discussion, PRD
 - Stage-aware forms (fields change per stage)
 - Archive on PRD edit with semantic versioning
@@ -104,7 +115,7 @@ Runs once to initialize a project. Cannot be re-run on the same folder. If the p
     idea_template.md
     prd_template.md
     changelog_template.md
-  /.agent/                    ← [MMP] scaffolded at init, populated at MMP build
+  /.agent/                    ← stubs created at wizard init [MVP], content written at MMP build
     /rules/
       domain-definitions.md   ← project domain names and their purpose
       type-definitions.md     ← what each type (Rule, Strategy, etc.) means
@@ -150,7 +161,7 @@ Every item belongs to exactly one stage. Stages are independent — an Idea does
 | `date_created` | Required | Required | Required | ISO 8601 + Unix timestamp (both stored) |
 | `date_modified` | — | — | Required | Auto-updated on each save |
 | `moscow` | Optional | Omitted | Required | `must` / `should` / `could` / `wont` |
-| `release_target` | Optional | Omitted | Required | `MVP` / `MMP` / `MLP` / `Scale` / `PMF` |
+| `release_target` | Optional | Omitted | Required | `MVP` / `MMP` / `MLP` / `PMF` |
 | `origin` | Optional | — | Required | `sensed` / `derived` / `imagined` |
 | `innovation_type` | Optional | — | Optional | `incremental` / `radical` / `process` |
 | `references` | Optional | Optional | Optional | Array of item IDs |
@@ -222,7 +233,7 @@ type: rule
 origin: derived
 status: raw
 date_created: 2026-09-23T10:45:00Z
-date_unix: 1758627900
+date_unix: 1790235900
 references: []
 ---
 
@@ -243,7 +254,7 @@ stage: discussion
 domain: core
 type: concept
 date_created: 2026-09-23T10:45:00Z
-date_unix: 1758627900
+date_unix: 1790235900
 references: []
 ---
 
@@ -272,7 +283,7 @@ release_target: MVP
 origin: derived
 date_created: 2026-09-23
 date_modified: 2026-09-23
-date_unix: 1758627900
+date_unix: 1790235900
 references: []
 ---
 
@@ -361,10 +372,16 @@ stale_after: ""               # optional ISO date — after this date, verified 
 Only PRD file edits trigger archiving. Idea and Discussion files are never archived.
 
 ### Archive process
-1. Before writing the updated PRD, the server copies the current file to `/archive/prds/`
-2. Archive filename: `<original-filename>_archived_<unix-timestamp>.md`
-3. The new file is written with the incremented version
-4. The changelog is auto-updated
+1. Server reads the current PRD file from `/prds/<domain>/`
+2. Server copies it to `/archive/prds/` — filename: `<original-filename>_archived_<unix-timestamp>.md`
+3. Server updates the `status` field in the archived copy to `superseded`
+4. Server **moves** the original file out of `/prds/<domain>/` — it now exists only in `/archive/prds/`
+5. Server writes the new version with the incremented version number into `/prds/<domain>/`
+6. The changelog is auto-updated
+
+> **Active folder rule:** `/prds/<domain>/` contains exactly one file per PRD item at any time — the current version. All prior versions live in `/archive/prds/` with `status: superseded`. There are never two versions of the same PRD in the active folder simultaneously.
+
+> **Atomic write rule:** Steps 2–5 are treated as a single atomic operation. If any step fails, the server rolls back — the original file is restored to `/prds/<domain>/` and the partial archive copy is removed. A failed save never leaves the active folder without a current version.
 
 ### Version bump — human selects one on the edit form
 
@@ -375,7 +392,7 @@ Only PRD file edits trigger archiving. Idea and Discussion files are never archi
 | **Major** `x.0.0` | Breaking change, scope redefinition, fundamental restructure |
 
 ### Archive folder rules
-- `/archive/prds/` — all superseded PRD versions
+- `/archive/prds/` — all superseded PRD versions, each with `status: superseded`
 - `/archive/chat/` — exists but is never populated (Discussion files are immutable, not archived)
 - No file in `/archive/` is ever deleted
 
@@ -388,7 +405,7 @@ Two independent version concepts — never conflated:
 | Concept | What it tracks | Example |
 |---|---|---|
 | **Document version** (`semver`) | Stability of the PRD document itself | `v0.1.0` = early draft, `v1.0.0` = first stable spec |
-| **Release target** (`release_target`) | Product maturity stage | `MVP`, `MMP`, `MLP`, `Scale`, `PMF` |
+| **Release target** (`release_target`) | Product maturity stage | `MVP`, `MMP`, `MLP`, `PMF` |
 
 A PRD can be `v1.3.0` and still target `MVP`. The version number describes the document. The release target describes the product.
 
@@ -575,7 +592,7 @@ Loaded only when the agent determines the task matches the skill description.
 | 2 | Type | Select | Yes | |
 | 3 | Description | Text | Yes | |
 | 4 | MoSCoW | Select | Yes | `must` / `should` / `could` / `wont` |
-| 5 | Release target | Select | Yes | `MVP` / `MMP` / `MLP` / `Scale` / `PMF` |
+| 5 | Release target | Select | Yes | `MVP` / `MMP` / `MLP` / `PMF` |
 | 6 | Origin | Select | Yes | `sensed` / `derived` / `imagined` |
 | 7 | Innovation type | Select | No | Shown only when origin = `imagined` |
 | 8 | Status | Select | Yes | `draft` / `active` / `superseded` / `archived` |
@@ -661,6 +678,7 @@ Read-only display modes on the list view. Do not modify any file.
 
 ## Changelog
 
+- v0.4.0 (2026-09-23) — Fixed timestamp bug in examples (1758627900 → 1790235900); resolved .agent wizard/MMP scope contradiction; removed Scale from release_target values; clarified MMR as alias for MMP; defined PRD active folder rule with atomic write and rollback; added explicit 127.0.0.1 loopback binding and security boundary section; added independent design review to plan-context
 - v0.3.0 (2026-09-23) — Added decimal addressing system (x.x.x); added EARS requirements syntax section with all 5 patterns, examples, and limitations; added .agent rules and skills file specifications; moved .agent scaffolding from PMF to MMP; updated acceptance criteria field to require EARS format; added `address` field to metadata model; updated PRD file example with EARS acceptance criteria
 - v0.2.0 (2026-09-23) — OKF v0.2 full spec added; MoSCoW ruling on Discussion stage; acceptance criteria added as required PRD field; archive subfolders differentiated; all deferred items tagged by release stage
 - v0.1.0 (2026-09-23) — initial draft
