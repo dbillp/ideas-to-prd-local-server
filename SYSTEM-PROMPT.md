@@ -1,5 +1,5 @@
 # System Prompt: Local Planning Server
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Date:** 2026-09-23
 **Status:** Draft — MVP scope ready for implementation
 
@@ -47,6 +47,8 @@ Build a local server that provides a web form for capturing structured planning 
 - Archive on PRD edit with semantic versioning
 - Changelog auto-updated on save
 - Basic list view per domain
+- `.agent/rules/` and `.agent/skills/` scaffolded by wizard
+- EARS format enforced on acceptance criteria field
 
 ### `[MLP]` — Daily driver quality
 - OKF v0.2 frontmatter enforcement
@@ -57,8 +59,8 @@ Build a local server that provides a web form for capturing structured planning 
 ### `[PMF]` — Post-validation additions
 - Multi-project support
 - Objectives and business requirements as structured documents
-- `.agent/rules/` and `.agent/skills/` scaffolding
 - SRS / TDD folder scaffolding
+- Extended `.agent/skills/` library (triage, classify, draft-prd)
 
 ---
 
@@ -102,8 +104,22 @@ Runs once to initialize a project. Cannot be re-run on the same folder. If the p
     idea_template.md
     prd_template.md
     changelog_template.md
+  /.agent/                    ← [MMP] scaffolded at init, populated at MMP build
+    /rules/
+      domain-definitions.md   ← project domain names and their purpose
+      type-definitions.md     ← what each type (Rule, Strategy, etc.) means
+      decimal-addressing.md   ← how the x.x.x addressing system works
+      ears-format.md          ← EARS patterns and when to use each
+      item-stages.md          ← Idea / Discussion / PRD rules and guardrails
+    /skills/
+      convert-to-ears.md      ← rewrite human text into EARS format for review
+      triage-idea.md          ← [MLP] de Bono triage playbook
+      draft-prd.md            ← [MLP] scaffold a PRD from a promoted Idea
+      classify-item.md        ← [MLP] assign decimal address to an item
   .git/
 ```
+
+> **`.agent/` folder at MVP:** The folder and file stubs are created by the wizard at init time so the structure is in place. Content is written during the MMP build. Stub files contain a header and a `# TODO` placeholder only.
 
 ---
 
@@ -138,6 +154,7 @@ Every item belongs to exactly one stage. Stages are independent — an Idea does
 | `origin` | Optional | — | Required | `sensed` / `derived` / `imagined` |
 | `innovation_type` | Optional | — | Optional | `incremental` / `radical` / `process` |
 | `references` | Optional | Optional | Optional | Array of item IDs |
+| `address` | Optional | Optional | Required | Decimal address `x.x.x` — `0` at any level = undefined |
 | `version` | — | — | Required | Semantic version `major.minor.patch` |
 | `status` | Required | — | Required | See status values below |
 
@@ -247,6 +264,7 @@ title: "core-rule-members-must-verify-email-before-accessing-analysis"
 stage: prd
 domain: core
 type: rule
+address: "1.3.1"
 version: 0.1.0
 status: draft
 moscow: must
@@ -278,8 +296,12 @@ references: []
 
 ## Acceptance criteria
 
-_Measurable, testable conditions that confirm this requirement is satisfied.
-No vague language — quantify everything (e.g., "email verified within 24h" not "email verified quickly")._
+_Each criterion must be written in EARS format. One statement per line.
+Agent can assist conversion — human reviews and approves before entry._
+
+- WHEN a member attempts to access the analysis feature, IF their email is not verified, THEN the server SHALL redirect them to the email verification screen and display 'Please verify your email to continue'.
+- WHEN a member submits email verification, IF the token is valid, THEN the server SHALL grant access to the analysis feature within 2 seconds.
+- IF the verification token has expired, THEN the server SHALL display 'Verification link expired' and offer to resend.
 
 ## Success metrics
 
@@ -388,6 +410,138 @@ A PRD can be `v1.3.0` and still target `MVP`. The version number describes the d
 
 ---
 
+## Decimal Addressing System `[MMP]`
+
+Every item has a unique three-level decimal address: `[domain].[type].[sequence]`
+
+### Level definitions
+
+| Level | Position | Range | Meaning |
+|---|---|---|---|
+| Domain | `x` | 0–7 | Which of the 7 domains. 0 = unassigned |
+| Type | `x.x` | 0–9 | What kind of item. 0 = untyped |
+| Sequence | `x.x.x` | 0–n | Item number within that coordinate. 0 = draft/unsequenced |
+
+### The `0` rule
+
+`0` at any level means **undefined at that level** — a progressive placeholder. Once a real number is assigned, the `0` is replaced. A fully classified item has no zeros.
+
+```
+0.0.0   → completely undefined (raw capture, nothing decided)
+1.0.0   → domain-1, type not yet decided
+1.3.0   → domain-1, Rule type, not yet sequenced
+1.3.7   → domain-1, Rule type, item 7 (fully addressed)
+```
+
+### Type number map (second level)
+
+```
+0 = undefined
+1 = Strategy
+2 = Story
+3 = Rule
+4 = Constraint
+5 = Composite Workflow
+6 = Gap
+7 = Glossary
+8 = Architecture
+9 = Concept
+```
+
+### Why this is AI-readable
+
+An AI agent can filter by coordinate without parsing any prose:
+
+- `*.3.*` → all Rule-type items across all domains
+- `1.*.*` → everything in domain-1
+- `*.0.*` → everything not yet typed — a triage queue
+- `*.*.0` → all drafts not yet formally sequenced
+
+### Address storage
+
+The decimal address is stored as a dedicated frontmatter field:
+
+```yaml
+address: "1.3.7"
+```
+
+Stage is **not** part of the decimal — it lives in frontmatter as `stage: prd`. The decimal encodes domain and type only. Sequence is assigned by the server at save time when the item is formally placed.
+
+---
+
+## EARS — Requirements Syntax `[MMP]`
+
+All acceptance criteria in PRD items must be written in EARS (Easy Approach to Requirements Syntax) format. EARS constrains free-form natural language into five testable patterns that both humans and AI can parse unambiguously.
+
+### The five patterns
+
+| Pattern | Keyword | Template |
+|---|---|---|
+| Ubiquitous | *(none)* | `The <system> SHALL <response>` |
+| Event-driven | WHEN | `WHEN <trigger>, the <system> SHALL <response>` |
+| State-driven | WHILE | `WHILE <precondition>, the <system> SHALL <response>` |
+| Optional feature | WHERE | `WHERE <feature is included>, the <system> SHALL <response>` |
+| Unwanted behaviour | IF / THEN | `IF <trigger>, THEN the <system> SHALL <response>` |
+
+**Combined (complex):**
+```
+WHILE <precondition>, WHEN <trigger>, the <system> SHALL <response>
+```
+
+### Examples
+
+| Human text (vague) | EARS equivalent (testable) |
+|---|---|
+| "The system should handle errors gracefully" | `IF an invalid domain is selected, THEN the server SHALL display 'invalid domain' and block submission` |
+| "MoSCoW must be required on PRDs" | `WHEN the PRD form is submitted, IF the MoSCoW field is empty, THEN the server SHALL block submission and display 'MoSCoW classification is required'` |
+| "Files should never be deleted" | `The server SHALL NOT delete any file from the project folder or archive` |
+| "Acceptance criteria must be EARS" | `WHILE a PRD form is active, WHEN the user submits, IF any acceptance criterion is not in EARS format, THEN the server SHALL highlight the field and display the relevant EARS pattern` |
+
+### EARS limitations
+
+EARS is not used for:
+- Non-functional requirements expressed as metrics (e.g. `page load ≤ 2.5s`) — use a dedicated NFR field
+- Architectural constraints — use `type: constraint` items
+- Requirements needing decision tables or state diagrams
+
+### Agent-assisted EARS conversion `[MMP]`
+
+The `.agent/skills/convert-to-ears.md` skill enables the following workflow:
+
+1. Human enters rough requirement text in plain language
+2. Human invokes the agent with the text
+3. Agent loads `convert-to-ears` skill, identifies the correct EARS pattern, rewrites the text
+4. Human reviews the EARS output, edits if needed, approves
+5. Approved EARS text is pasted into the acceptance criteria field by the human
+6. The server stores it exactly as entered — no further transformation
+
+> The agent proposes. The human decides. The server stores.
+
+### .agent rules files — always loaded `[MMP]`
+
+Short, invariant, project-scoped. Loaded at the start of every agent session.
+
+| File | Contents |
+|---|---|
+| `domain-definitions.md` | The 7 domain names for this project and what each covers |
+| `type-definitions.md` | What each type (Rule, Strategy, Concept, etc.) means in this project |
+| `decimal-addressing.md` | The x.x.x system: level definitions, type number map, the 0 rule |
+| `ears-format.md` | All five EARS patterns with examples and limitations |
+| `item-stages.md` | Idea / Discussion / PRD stage rules, guardrails, and field requirements |
+
+### .agent skills files — loaded on demand `[MMP/MLP]`
+
+Loaded only when the agent determines the task matches the skill description.
+
+| File | Scope | Purpose |
+|---|---|---|
+| `convert-to-ears.md` | `[MMP]` | Rewrite human requirement text into EARS format for human review |
+| `triage-idea.md` | `[MLP]` | Walk an Idea through de Bono 8-category triage |
+| `draft-prd.md` | `[MLP]` | Scaffold a PRD skeleton from a promoted Idea |
+| `classify-item.md` | `[MLP]` | Assign or suggest a decimal address for an unaddressed item |
+
+---
+
 ## Form Behavior
 
 ### Idea form `[MVP]`
@@ -433,7 +587,7 @@ A PRD can be `v1.3.0` and still target `MVP`. The version number describes the d
 | 14 | Users / personas | Textarea | No | |
 | 15 | User stories | Textarea | No | |
 | 16 | Requirements | Textarea | Yes | |
-| 17 | Acceptance criteria | Textarea | Yes | Measurable, testable. No vague language. |
+| 17 | Acceptance criteria | Textarea | Yes | One EARS statement per line. Agent can assist conversion. Human approves before entry. |
 | 18 | Success metrics | Textarea | No | |
 | 19 | Open questions | Textarea | No | |
 
@@ -496,15 +650,17 @@ Read-only display modes on the list view. Do not modify any file.
 | Multi-project support | PMF |
 | Item relationships beyond the references field | PMF |
 | Wizard re-run / migration behavior | PMF |
-| `.agent/rules/` and `.agent/skills/` scaffolding | PMF |
 | SRS / TDD folder scaffolding | PMF |
 | Business requirements as a structured document | PMF |
 | Objectives as a structured (non-freeform) document | PMF |
 | `release_target` spanning multiple stages | MMP review |
+| EARS validation in form — enforce pattern server-side or advisory only | MMP decision |
+| Decimal address auto-assignment vs. human-assigned | MMP decision |
 
 ---
 
 ## Changelog
 
+- v0.3.0 (2026-09-23) — Added decimal addressing system (x.x.x); added EARS requirements syntax section with all 5 patterns, examples, and limitations; added .agent rules and skills file specifications; moved .agent scaffolding from PMF to MMP; updated acceptance criteria field to require EARS format; added `address` field to metadata model; updated PRD file example with EARS acceptance criteria
 - v0.2.0 (2026-09-23) — OKF v0.2 full spec added; MoSCoW ruling on Discussion stage; acceptance criteria added as required PRD field; archive subfolders differentiated; all deferred items tagged by release stage
 - v0.1.0 (2026-09-23) — initial draft

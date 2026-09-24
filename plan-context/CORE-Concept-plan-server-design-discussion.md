@@ -692,3 +692,148 @@ Appended this full decimal classification discussion to CORE-Concept-plan-server
 - A fully classified item has no zeros in its address
 - Stage is NOT part of the decimal — it lives in frontmatter as a first-class field
 - The decimal address is a query coordinate for AI filtering, not just a label
+
+
+---
+
+## EARS and .agent Files Study Discussion
+
+**Date:** 2026-09-23
+**Topic:** Easy Approach to Requirements Syntax (EARS) and .agent rules/skills files
+
+---
+
+**USER:**
+Two more things, use of Easy Approach to Requirements Syntax (EARS) for the Requirements Engineering. And the use of .agent rules and skills md files for the agent to be able to understand (have context) and assist in converting human words in the EARS format, which will help ai-agent and human. Lets study these two ideas, EARS and .agent files.
+
+---
+
+**AI:**
+Studied both. Full findings below.
+
+### EARS — Easy Approach to Requirements Syntax
+
+Developed at Rolls-Royce in 2009 for jet engine airworthiness certification. Adopted by Airbus, NASA, Bosch, Intel, Siemens. Built into Kiro's spec-driven workflow natively.
+
+**The five patterns:**
+
+| Pattern | Keyword | Template | Use when |
+|---|---|---|---|
+| Ubiquitous | none | `The <system> SHALL <response>` | Always true, no condition |
+| Event-driven | WHEN | `WHEN <trigger>, the <system> SHALL <response>` | Something happens |
+| State-driven | WHILE | `WHILE <state>, the <system> SHALL <response>` | A condition persists |
+| Optional feature | WHERE | `WHERE <feature included>, the <system> SHALL <response>` | Variant / optional capability |
+| Unwanted behaviour | IF/THEN | `IF <bad event>, THEN the <system> SHALL <response>` | Fault, error, failure handling |
+
+Combined (complex):
+```
+WHILE <precondition>, WHEN <trigger>, the <system> SHALL <response>
+```
+
+**Why it fits this system:**
+The PRD form has a free-text acceptance criteria field with a note against vague language. EARS replaces that note with a mechanical structure. The form guides the human into an EARS sentence. The AI can parse it without ambiguity.
+
+- Vague: "The system should handle errors gracefully"
+- EARS: "IF an invalid domain is selected, THEN the server SHALL display 'invalid domain' and block form submission"
+
+The second is directly testable and machine-readable.
+
+**Limitation:** EARS works best for functional, behavioural requirements. Less suited to architectural constraints or non-functional requirements (performance budgets, SLA targets) — those are better as structured fields.
+
+### .agent Files — Rules and Skills
+
+**The distinction:**
+
+| File type | Who triggers it | When loaded | What it contains |
+|---|---|---|---|
+| **Rules** | Always | Every session, automatically | Non-negotiables. Naming conventions, safety constraints, hard boundaries. Short. |
+| **Skills** | The agent, on demand | Only when the task matches | Playbooks for specific workflows. Loaded lazily — only when relevant. |
+
+**Key insight — progressive disclosure:**
+The agent scans skill file names and descriptions first. It only loads the full content when it decides the skill is relevant to the current task. This keeps the context window clean. Heavy content that is not needed never occupies memory. This directly addresses the active memory / context fatigue problem identified from the sample project failure.
+
+**Applied to this system:**
+
+`.agent/rules/` — always loaded, short, invariant:
+```
+rules/
+  domain-definitions.md     ← the 7 domain names and what they mean
+  type-definitions.md        ← what each type means
+  decimal-addressing.md      ← how the x.x.x system works
+  ears-format.md             ← the EARS patterns and when to use each
+  item-stages.md             ← Idea / Discussion / PRD rules and guardrails
+```
+
+`.agent/skills/` — loaded on demand, task-specific playbooks:
+```
+skills/
+  convert-to-ears.md         ← take human text and rewrite as EARS
+  triage-idea.md             ← move an Idea through de Bono triage
+  draft-prd.md               ← scaffold a PRD from a promoted Idea
+  classify-item.md           ← assign decimal address to an item
+```
+
+**The EARS conversion skill is the key one:**
+
+Human writes: "Users should not be able to submit the form if MoSCoW is not selected"
+
+Agent loads `convert-to-ears.md`, reads the pattern, rewrites as:
+"WHEN the form is submitted, IF the MoSCoW field is empty, THEN the server SHALL block submission and display 'MoSCoW classification is required'"
+
+Human reviews, approves, it goes into PRD acceptance criteria. Human decides. Agent formats.
+
+### How the two work together
+
+```
+Human types rough requirement text
+        ↓
+Agent loads convert-to-ears skill
+        ↓
+Agent rewrites as EARS pattern(s)
+        ↓
+Human reviews, edits, approves
+        ↓
+EARS requirement stored in PRD acceptance criteria field
+        ↓
+Decimal address assigned (x.x.x)
+        ↓
+Frontmatter written, file saved
+```
+
+Result: a PRD where every acceptance criterion is human-authored in intent, EARS-structured in format, machine-readable by pattern, and uniquely addressable by decimal.
+
+### Release scope placement
+
+- EARS in the acceptance criteria field → MMP (the PRD form)
+- `.agent/rules/` scaffolded by wizard → MMP
+- `.agent/skills/` with convert-to-ears → MMP
+- Full skill library (triage, classify, draft-prd) → MLP
+
+---
+
+**USER:**
+yes, proceed
+
+---
+
+**AI:**
+Appended this study to concept file and updated SYSTEM-PROMPT.md to v0.3.0 with:
+- EARS patterns documented as a named section
+- Acceptance criteria field updated to require EARS format
+- .agent folder structure added to wizard output
+- .agent rules and skills file list specified
+- Release scope updated accordingly
+- Decimal classification system added to open items resolved list
+
+---
+
+## Design Conclusions — EARS and .agent Files
+
+- EARS is the required format for all acceptance criteria in PRD items
+- The form will guide humans toward EARS patterns — the agent assists conversion, the human approves
+- EARS is not used for non-functional requirements (NFRs) — those remain as structured fields
+- `.agent/rules/` files are always-loaded, short, invariant project truths
+- `.agent/skills/` files are loaded on demand — progressive disclosure keeps context clean
+- The `convert-to-ears` skill is the most important skill for this system
+- Both `.agent/rules/` and `.agent/skills/` are scaffolded by the wizard at project init (MMP)
+- This pattern directly addresses the context fatigue failure from the sample project
